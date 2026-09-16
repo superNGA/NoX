@@ -11,200 +11,98 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../BloomFilter.h"
-#include "../FilterDesc.h"
+#include "../../BloomFilter/BloomFilter.h"
+#include "../../BloomFilter/FilterDesc.h"
 #include "../../Defs.h"
 
 
+extern struct FilterDesc_t g_filter;
 
-const char* g_szDataFile   = NULL;
-const char* g_szFilterFile = NULL;
-const char* g_szHelpString = R"(
+
+
+const char* data_file   = NULL;
+const char* help_string = R"(
     Bloom-Filter Gen output verification program.
-    Usage : ./BloomFilterGen -d dataset_file -f filter_file
+    Usage : ./BloomFilterGen -d dataset_file
 )";
 
 
 
-static int ExtractFilterDesc(FILE* pFilterFile, struct FilterDesc_t* pFilterDescOut);
-static int ExtractCmdLineArgs(int nArgs, char** szArgs);
+static int extract_cmdline_args(int nArgs, char** szArgs);
 
 
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-int main(int nArgs, char** szArgs)
+int main(int argc, char** argv)
 {
-    int   iOk         = EXIT_SUCCESS;
-    FILE* pFilterFile = NULL;
-    FILE* pDataFile   = NULL;
-
-    // Command line args...
-    if (ExtractCmdLineArgs(nArgs, szArgs) != 0)
-    {
-        printf("%s\n", g_szHelpString); 
-        return iOk;
+    if (extract_cmdline_args(argc, argv) != EXIT_SUCCESS) {
+        printf("%s\n", help_string); 
+        return EXIT_SUCCESS;
     }
 
 
-    // Open filter file.
-    pFilterFile = fopen(g_szFilterFile, "r");
-    if (pFilterFile == NULL)
-    { 
-        printf("Failed to open filter file : %s\n", g_szFilterFile);
-        iOk = EXIT_FAILURE; goto EXIT;
-    }
-
-    // Open data file.
-    pDataFile = fopen(g_szDataFile, "r");
-    if (pDataFile == NULL)
-    {
-        printf("Failed to open data file : %s\n", g_szDataFile);
-        iOk = EXIT_FAILURE; goto EXIT;
+    if (g_filter.m_iFilterSize <= 8 || g_filter.m_iDataSize <= 0 || g_filter.m_iK <= 0 || g_filter.m_iBlockSizeBytes <= 0) {
+        printf("Invalid filter.\n");
+        return EXIT_FAILURE;
     }
 
 
-
-    // Extract the filter description header for filter file.
-    struct FilterDesc_t filterDesc = {0}; ExtractFilterDesc(pFilterFile, &filterDesc);
-    printf("Filter size : %zu bits, Data size : %zu entries, K : %zu, BlockSize : %zu\n",
-            filterDesc.m_iFilterSize, filterDesc.m_iDataSize, filterDesc.m_iK, filterDesc.m_iBlockSizeBytes);
-
-    // Is filter description even valid?
-    if (filterDesc.m_iFilterSize <= 8 || filterDesc.m_iDataSize <= 0 || filterDesc.m_iK <= 0 || filterDesc.m_iBlockSizeBytes <= 0)
-    {
-        printf("Invalid filter file.\n");
-        iOk = EXIT_FAILURE; goto EXIT;
+    FILE* h_datafile = fopen(data_file, "r");
+    if (h_datafile == NULL) {
+        printf("Failed to open data file : %s\n", data_file);
+        return EXIT_FAILURE;
     }
 
-    // Read bloom filter from file to memory.
-    unsigned long long iFitlerSizeBytes = filterDesc.m_iFilterSize / 8;
-    unsigned char*     pBloomFilter     = calloc(iFitlerSizeBytes, 1);
 
-    char c = ' ';
-    rewind(pFilterFile); while((c = fgetc(pFilterFile)) != '\n'); // This sets the file-cursor to the start of next line.
-    for (unsigned long long i = 0; i < iFitlerSizeBytes; ++i)
-    {
-        pBloomFilter[i] = fgetc(pFilterFile);
-    }
-    printf("Bloom-Filter loaded\n");
-
-
-
-    // Test the data file against the bloom filter.
+    int fails = 0, tests = 0;
     __attribute__((aligned(CLS))) char szBuffer[256] = {0};
-    int iFails = 0, iTests = 0;
-    while(fgets(szBuffer, sizeof(szBuffer), pDataFile) != NULL)
-    {
+    while(fgets(szBuffer, sizeof(szBuffer), h_datafile) != NULL) {
         BF_FormatStrInPlace(szBuffer);
-        int bFound = BF_CheckString(pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
-        if (bFound == false)
-        {
+
+        int bFound = BF_CheckString(g_filter.m_pBloomFilter, &g_filter, szBuffer, strlen(szBuffer));
+        if (bFound == false) {
             printf("Failed to find : %s\n", szBuffer);
-            ++iFails;
+            ++fails;
         }
-        ++iTests;
+        ++tests;
     }
-    printf("%d strings tested. %d tests failed.\n", iTests, iFails);
+    printf("%d strings tested. %d tests failed.\n", tests, fails);
     
 
-EXIT:
-    if (pFilterFile != NULL) fclose(pFilterFile);
-    if (pDataFile   != NULL) fclose(pDataFile);
-    return iOk;
+    if (h_datafile != NULL)
+        fclose(h_datafile);
+
+    return EXIT_SUCCESS;
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-static int ExtractFilterDesc(FILE* pFilterFile, struct FilterDesc_t* pFilterDescOut)
+static int extract_cmdline_args(int argc, char** argv)
 {
-    rewind(pFilterFile); char szBuffer[256] = {0};
-
-
-    int     iOutputIt    = 0;
-    size_t* vecOutputs[] = {
-        &pFilterDescOut->m_iFilterSize, 
-        &pFilterDescOut->m_iK, 
-        &pFilterDescOut->m_iDataSize, 
-        &pFilterDescOut->m_iBlockSizeBytes};
-
-
-    char cTemp = ' '; int iBufferIt = 0;
-    while(cTemp != '\n')
-    {
-        if (cTemp == EOF) return 1; // Invalid header in filter file.
-
-        // Buffer too small? ( Likely invalid header for filter file. )
-        if (iBufferIt >= sizeof(szBuffer) - 2) // Must have capacity for 2 more characters. 
-            return 1;
-
-
-        // Store this character & null terminate it.
-        szBuffer[iBufferIt] = cTemp; ++iBufferIt;
-        szBuffer[iBufferIt] = '\0';
-
-        // If this number ends, store it in appropriate variable.
-        char cNext = fgetc(pFilterFile);
-        if (cTemp == ',' || cNext == '\n')
-        {
-            *vecOutputs[iOutputIt] = atoi(szBuffer);
-            iOutputIt++;
-            iBufferIt = 0;
-        }
-
-        cTemp = cNext;
-    }
-
-
-    // Not all variables in the output list got initialized.
-    if (iOutputIt != sizeof(vecOutputs))
-        return 1;
-
-    return 0;
-}
-
-
-///////////////////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////////////////
-static int ExtractCmdLineArgs(int nArgs, char** szArgs)
-{
-    if (nArgs <= 1)
+    if (argc <= 1)
         return 1;
 
 
-    for (size_t iArgIndex = 1; iArgIndex < nArgs; iArgIndex++)
-    {
-        const char* szThisArg = szArgs[iArgIndex];
-        bool        bLastArg  = iArgIndex + 1 >= nArgs;
+    for (size_t i = 1; i < argc; i++) {
+        const char* arg       = argv[i];
+        bool        last_iter = i + 1 >= argc;
 
-        if (strncmp(szThisArg, "-f", sizeof("-f")) == 0)
-        {
-            if (bLastArg == true)
-            {
-                printf("No output file found.\n");
-                return 1;
-            }
-
-            g_szFilterFile = szArgs[iArgIndex + 1];
-            iArgIndex++; // Consumed next argument.
-        }
-        else if(strncmp(szThisArg, "-d", sizeof("-d")) == 0)
-        {
-            if (bLastArg == true)
-            {
+        if(strncmp(arg, "-d", sizeof("-d")) == 0) {
+            if (last_iter == true) {
                 printf("No input file found.\n");
                 return 1;
             }
 
-            g_szDataFile = szArgs[iArgIndex + 1];
-            iArgIndex++; // Consumed next argument.
+            data_file = argv[i + 1];
+            i++; // Consumed next argument.
         }
         else
             return 1;
     }
 
 
-    return (g_szDataFile != NULL && g_szFilterFile != NULL) ? 0 : 1;
+    return (data_file == NULL) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
