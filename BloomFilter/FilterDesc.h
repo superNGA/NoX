@@ -11,18 +11,17 @@
 
 
 
-typedef unsigned long size_t;
-
-
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
 struct FilterDesc_t
 {
-    size_t m_iFilterSize;
-    size_t m_iK;
-    size_t m_iDataSize;
-    size_t m_iBlockSizeBytes;
+    unsigned long long m_iFilterSize;
+    unsigned long long m_iK;
+    unsigned long long m_iDataSize;
+    unsigned long long m_iBlockSizeBytes;
+
+    unsigned char*     m_pBloomFilter;
 };
 
 

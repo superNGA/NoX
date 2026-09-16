@@ -20,7 +20,7 @@
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-void BF_AddString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen)
+void BF_AddString(struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen)
 {
     unsigned long long iBlockSizeBits   = pFilterDesc->m_iBlockSizeBytes * 8;
     unsigned long long iFilterSizeBytes = pFilterDesc->m_iFilterSize / 8;
@@ -37,14 +37,14 @@ void BF_AddString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc,
         unsigned int iBitIndexAbs      = iBitOffset + iBitIndexRelative;
 
         // assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
-        BF_ToggleBit(pBloomFilter, iBitIndexAbs, 1);
+        BF_ToggleBit(pFilterDesc, iBitIndexAbs, 1);
     }
 }
 
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-int BF_CheckString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen)
+int BF_CheckString(struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen)
 {
     unsigned long long iBlockSizeBits   = pFilterDesc->m_iBlockSizeBytes * 8;
     unsigned long long iFilterSizeBytes = pFilterDesc->m_iFilterSize / 8;
@@ -61,7 +61,7 @@ int BF_CheckString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc
         unsigned int iBitIndexAbs      = iBitOffset + iBitIndexRelative;
 
         // assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
-        if (BF_CheckBit(pBloomFilter, iBitIndexAbs) == false)
+        if (BF_CheckBit(pFilterDesc, iBitIndexAbs) == false)
             return 0;
     }
 
@@ -97,15 +97,15 @@ unsigned int BF_GetHash(const char* szInput, unsigned long iLen, unsigned int iS
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-void BF_ToggleBit(unsigned char* pBloomFilter, unsigned long iBitIndex, int bEnable)
+void BF_ToggleBit(struct FilterDesc_t* pFilterDesc, unsigned long iBitIndex, int bEnable)
 {
-    size_t        iByteIndex = iBitIndex / 8;
-    unsigned char iMask      = (1 << (7 - (iBitIndex % 8))) & 0xFF; // Subtracting from '7' because 0th bit is right-most, but we need it to be left-most.
+    unsigned long long iByteIndex = iBitIndex / 8;
+    unsigned char      iMask      = (1 << (7 - (iBitIndex % 8))) & 0xFF; // Subtracting from '7' because 0th bit is right-most, but we need it to be left-most.
 
     if (bEnable == false)
-        pBloomFilter[iByteIndex] &= ~iMask;
+        pFilterDesc->m_pBloomFilter[iByteIndex] &= ~iMask;
     else
-        pBloomFilter[iByteIndex] |= iMask;
+        pFilterDesc->m_pBloomFilter[iByteIndex] |= iMask;
 
     return;
 }
@@ -113,12 +113,12 @@ void BF_ToggleBit(unsigned char* pBloomFilter, unsigned long iBitIndex, int bEna
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-int BF_CheckBit(unsigned char* pBloomFilter, unsigned long iBitIndex)
+int BF_CheckBit(struct FilterDesc_t* pFilterDesc, unsigned long iBitIndex)
 {
-    size_t        iByteIndex = iBitIndex / 8;
-    unsigned char iMask      = (1 << (7 - (iBitIndex % 8))) & 0xFF; // Subtracting from '7' because 0th bit is right-most, but we need it to be left-most.
+    unsigned long long iByteIndex = iBitIndex / 8;
+    unsigned char      iMask      = (1 << (7 - (iBitIndex % 8))) & 0xFF; // Subtracting from '7' because 0th bit is right-most, but we need it to be left-most.
 
-    return pBloomFilter[iByteIndex] & iMask;
+    return pFilterDesc->m_pBloomFilter[iByteIndex] & iMask;
 }
 
 

@@ -13,13 +13,16 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
+#include <time.h>
 
-#include "BloomFilter.h"
-#include "FilterDesc.h"
+#include "../BloomFilter/BloomFilter.h"
+#include "../BloomFilter/FilterDesc.h"
 #include "../Defs.h"
 
 
 #define BLOCK_SIZE (CLS)
+
+#define FILTER_DESC_HEADER "BloomFilter/FilterDesc.h"
 
 
 
@@ -31,6 +34,8 @@ const char* g_szHelpString = R"(
     Usage : ./BloomFilterGen -i input_file -o output_file
 )";
 
+const char* g_szOutputFileHdr = R"(This file is generated using BloomFilerGen tool.)";
+
 
 
 
@@ -38,6 +43,8 @@ static int    ExtractCmdLineArgs(int    nArgs, char** szArgs);
 static size_t CountLinesInFile  (FILE*  pFile); 
 static size_t CalcFilterSize    (size_t iDataSize, double flErrRate, size_t iBlockSizeBits);
 static size_t CalcK             (size_t iDataSize, size_t iFilterSize);
+
+static void   WriteFilterToFile(FILE* pOutputFile, struct FilterDesc_t* pFilterDesc);
 
 
 
@@ -84,7 +91,7 @@ int main(int nArgs, char** szArgs)
 
 
     // Cross-check filter specs with user before proceeding.
-    printf("Filter size : %zu bytes, Data size : %zu entries, K : %zu\n", filterDesc.m_iFilterSize / 8, filterDesc.m_iDataSize, filterDesc.m_iK);
+    printf("Filter size : %llu bytes, Data size : %llu entries, K : %llu\n", filterDesc.m_iFilterSize / 8, filterDesc.m_iDataSize, filterDesc.m_iK);
     printf("[y] to proceed : "); char cUsrInput = 'n'; scanf("%c", &cUsrInput);
     if (cUsrInput != 'y')
     {
@@ -102,16 +109,16 @@ int main(int nArgs, char** szArgs)
         iOk = 1; goto EXIT;
     }
 
-    fprintf(pOutputFile, "%zu, %zu, %zu, %zu\n", filterDesc.m_iFilterSize, filterDesc.m_iK, filterDesc.m_iDataSize, filterDesc.m_iBlockSizeBytes);
+    // fprintf(pOutputFile, "%llu, %llu, %llu, %llu\n", filterDesc.m_iFilterSize, filterDesc.m_iK, filterDesc.m_iDataSize, filterDesc.m_iBlockSizeBytes);
 
 
 
     // Constructing Bloom-Filter.
     unsigned long long iFilterSizeBytes = filterDesc.m_iFilterSize / 8;
-    unsigned char*     pBloomFilter     = calloc(iFilterSizeBytes, 1);
-    if (pBloomFilter == NULL)
+    filterDesc.m_pBloomFilter           = calloc(iFilterSizeBytes, 1);
+    if (filterDesc.m_pBloomFilter == NULL)
     {
-        printf("Failed to allocate bloom filter : %zu bits or %llu bytes\n", filterDesc.m_iFilterSize, iFilterSizeBytes);
+        printf("Failed to allocate bloom filter : %llu bits or %llu bytes\n", filterDesc.m_iFilterSize, iFilterSizeBytes);
         goto EXIT;
     }
 
@@ -120,12 +127,14 @@ int main(int nArgs, char** szArgs)
     while (fgets(szBuffer, sizeof(szBuffer), pInputFile) != NULL)
     {
         BF_FormatStrInPlace(szBuffer);
-        BF_AddString(pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
+        BF_AddString(filterDesc.m_pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
     }
 
 
+
     // Write bloom filter to file.
-    fwrite(pBloomFilter, sizeof(char), iFilterSizeBytes, pOutputFile);
+    // fwrite(filterDesc.m_pBloomFilter, sizeof(char), iFilterSizeBytes, pOutputFile);
+    WriteFilterToFile(pOutputFile, &filterDesc);
 
     printf("Bloom filter written to file [ %s ]\n", g_szOutputFile);
 
@@ -216,4 +225,45 @@ static size_t CalcK(size_t iDataSize, size_t iFilterSize)
         iK = 1;
 
     return iK;
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+static void WriteFilterToFile(FILE* pOutputFile, struct FilterDesc_t* pFilterDesc)
+{
+    fprintf(pOutputFile, "/*\n");
+    fprintf(pOutputFile, "%s\n", g_szOutputFileHdr);
+
+    // Get date string.
+    time_t raw_time         = time(NULL); struct tm *now = localtime(&raw_time);
+    char   szDateBuffer[11] = {0};        strftime(szDateBuffer, sizeof(szDateBuffer), "%Y-%m-%d", now);
+
+    fprintf(pOutputFile, "Generated on : %s\n", szDateBuffer);
+    fprintf(pOutputFile, "*/\n\n");
+
+
+    fprintf(pOutputFile, "#include \"%s\"\n\n\n", FILTER_DESC_HEADER);
+
+
+    size_t iFilterSizeBytes = pFilterDesc->m_iFilterSize / 8; // Size is in bits right here.
+    fprintf(pOutputFile, "static unsigned char g_pBloomFilterRaw[%zu] = {", iFilterSizeBytes);
+    for (size_t iByteIndex = 0; iByteIndex < iFilterSizeBytes; iByteIndex++)
+    {
+        if (iByteIndex % 16 == 0)
+            fprintf(pOutputFile, "\n    ");
+
+        fprintf(pOutputFile, "0x%02X, ", pFilterDesc->m_pBloomFilter[iByteIndex]);
+    }
+    fprintf(pOutputFile, "\n};\n\n\n");
+
+
+    fprintf(pOutputFile, "struct FilterDesc_t g_filter = {\n");
+    fprintf(pOutputFile, "    .m_iFilterSize     = %llu,\n", pFilterDesc->m_iFilterSize);
+    fprintf(pOutputFile, "    .m_iK              = %llu,\n", pFilterDesc->m_iK);
+    fprintf(pOutputFile, "    .m_iDataSize       = %llu,\n", pFilterDesc->m_iDataSize);
+    fprintf(pOutputFile, "    .m_iBlockSizeBytes = %llu,\n", pFilterDesc->m_iBlockSizeBytes);
+    fprintf(pOutputFile, "    .m_pBloomFilter    = g_pBloomFilterRaw\n");
+
+    fprintf(pOutputFile, "\n};");
 }
