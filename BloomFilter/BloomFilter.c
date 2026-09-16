@@ -11,9 +11,9 @@
 #include "../Hash/murmur3.h"
 #include "FilterDesc.h"
 
-#include <assert.h>
-#include <stdbool.h>
-#include <string.h>
+// #include <stdbool.h>
+#define false (0)
+#define true  (1)
 
 
 
@@ -36,7 +36,7 @@ void BF_AddString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc,
         unsigned int iBitIndexRelative = iHash % iBlockSizeBits; // Block size in bits.
         unsigned int iBitIndexAbs      = iBitOffset + iBitIndexRelative;
 
-        assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
+        // assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
         BF_ToggleBit(pBloomFilter, iBitIndexAbs, 1);
     }
 }
@@ -60,7 +60,7 @@ int BF_CheckString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc
         unsigned int iBitIndexRelative = iHash % iBlockSizeBits; // Block size in bits.
         unsigned int iBitIndexAbs      = iBitOffset + iBitIndexRelative;
 
-        assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
+        // assert(iBitIndexAbs < pFilterDesc->m_iFilterSize && "Invalid absolute bit index.");
         if (BF_CheckBit(pBloomFilter, iBitIndexAbs) == false)
             return 0;
     }
@@ -73,7 +73,7 @@ int BF_CheckString(unsigned char* pBloomFilter, struct FilterDesc_t* pFilterDesc
 ///////////////////////////////////////////////////////////////////////////
 unsigned int BF_GetSeed(int iK)
 {
-    assert(iK >= 0 && "Invalid K value");
+    // assert(iK >= 0 && "Invalid K value");
     return iK;
 }
 
@@ -126,7 +126,6 @@ int BF_CheckBit(unsigned char* pBloomFilter, unsigned long iBitIndex)
 ///////////////////////////////////////////////////////////////////////////
 void BF_FormatStrInPlace(char* szInput)
 {
-    unsigned long long i = 0;
     while (*szInput != '\0')
     {
         // No new-line char!

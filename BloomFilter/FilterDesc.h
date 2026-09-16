@@ -10,7 +10,8 @@
 #define FILTER_DESC_H
 
 
-#include <stddef.h>
+
+typedef unsigned long size_t;
 
 
 

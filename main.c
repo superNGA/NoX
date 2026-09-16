@@ -21,7 +21,7 @@
 
 #include <asm/msr.h>
 
-#include "BloomFilter.h"
+#include "BloomFilter/BloomFilter.h"
 #include "Defs.h"
 
 
@@ -86,7 +86,7 @@ static unsigned int NfHook(void *pPriv, struct sk_buff *pSkb, const struct nf_ho
 
 
         unsigned long long iLabelSize  = (unsigned long long)g_szLabelBuffer[i];
-        int                iMatchFound = BF_CheckProb(&g_szLabelBuffer[i + 1], iLabelSize);
+        int                iMatchFound = 0; // BF_CheckString(&g_szLabelBuffer[i + 1], iLabelSize);
         if (iMatchFound == true)
         {
             schedule_work(&NoxKernelRebootWork); // kaboom!
@@ -163,7 +163,6 @@ static int InitModule(void)
     nf_register_net_hook(&init_net, &g_nfHookOps);
 
 
-    BF_Init();
     printk(KERN_INFO "Bloom Filter Initialized.\n");
 
 

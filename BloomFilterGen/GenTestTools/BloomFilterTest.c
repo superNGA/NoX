@@ -1,3 +1,11 @@
+//=========================================================================
+//                      Bloom Filter Test
+//=========================================================================
+// by      : INSANE
+// created : 15/09/2026
+//
+// purpose : Tests Bloom-Filter against input data set.
+//-------------------------------------------------------------------------
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -9,10 +17,11 @@
 
 
 
+const char* g_szDataFile   = NULL;
 const char* g_szFilterFile = NULL;
 const char* g_szHelpString = R"(
     Bloom-Filter Gen output verification program.
-    Usage : ./BloomFilterGenCli -f filter_file
+    Usage : ./BloomFilterGen -d dataset_file -f filter_file
 )";
 
 
@@ -28,6 +37,7 @@ int main(int nArgs, char** szArgs)
 {
     int   iOk         = EXIT_SUCCESS;
     FILE* pFilterFile = NULL;
+    FILE* pDataFile   = NULL;
 
     // Command line args...
     if (ExtractCmdLineArgs(nArgs, szArgs) != 0)
@@ -42,6 +52,14 @@ int main(int nArgs, char** szArgs)
     if (pFilterFile == NULL)
     { 
         printf("Failed to open filter file : %s\n", g_szFilterFile);
+        iOk = EXIT_FAILURE; goto EXIT;
+    }
+
+    // Open data file.
+    pDataFile = fopen(g_szDataFile, "r");
+    if (pDataFile == NULL)
+    {
+        printf("Failed to open data file : %s\n", g_szDataFile);
         iOk = EXIT_FAILURE; goto EXIT;
     }
 
@@ -73,24 +91,26 @@ int main(int nArgs, char** szArgs)
 
 
 
-    char szBuffer[256] = {0};
-    while (true)
+    // Test the data file against the bloom filter.
+    __attribute__((aligned(CLS))) char szBuffer[256] = {0};
+    int iFails = 0, iTests = 0;
+    while(fgets(szBuffer, sizeof(szBuffer), pDataFile) != NULL)
     {
-        printf("[ ~ to exit ] Search : ");
-        scanf("%250s", szBuffer);
-
-        if (szBuffer[0] == '~')
-            break;
-
         BF_FormatStrInPlace(szBuffer);
-        int iFound = BF_CheckString(pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
-        printf("[ %s ]\n", iFound == 0 ? "Not-Found" : "Found");
+        int bFound = BF_CheckString(pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
+        if (bFound == false)
+        {
+            printf("Failed to find : %s\n", szBuffer);
+            ++iFails;
+        }
+        ++iTests;
     }
-
+    printf("%d strings tested. %d tests failed.\n", iTests, iFails);
     
 
 EXIT:
     if (pFilterFile != NULL) fclose(pFilterFile);
+    if (pDataFile   != NULL) fclose(pDataFile);
     return iOk;
 }
 
@@ -169,11 +189,22 @@ static int ExtractCmdLineArgs(int nArgs, char** szArgs)
             g_szFilterFile = szArgs[iArgIndex + 1];
             iArgIndex++; // Consumed next argument.
         }
+        else if(strncmp(szThisArg, "-d", sizeof("-d")) == 0)
+        {
+            if (bLastArg == true)
+            {
+                printf("No input file found.\n");
+                return 1;
+            }
+
+            g_szDataFile = szArgs[iArgIndex + 1];
+            iArgIndex++; // Consumed next argument.
+        }
         else
             return 1;
     }
 
 
-    return (g_szFilterFile != NULL) ? 0 : 1;
+    return (g_szDataFile != NULL && g_szFilterFile != NULL) ? 0 : 1;
 }
 
