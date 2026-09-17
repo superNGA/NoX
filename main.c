@@ -32,6 +32,8 @@ MODULE_AUTHOR     ("insane");
 
 
 #define DNS_LOOKUP_PORT (53)
+#define EXIT_FAILURE    (1)
+#define EXIT_SUCCESS    (0)
 
 
 static struct kprobe      g_kprobe;
@@ -39,6 +41,9 @@ static struct nf_hook_ops g_nfHookOps;
 
 
 __attribute__((aligned(CLS))) unsigned char g_szLabelBuffer[256] = {0};
+
+
+extern struct FilterDesc_t g_filter; // Bloom Filter.
 
 
 
@@ -50,6 +55,56 @@ static void DeferredReboot(struct work_struct *pWork)
     orderly_reboot();
 }
 static DECLARE_WORK(NoxKernelRebootWork, DeferredReboot);
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+static int FixDomainInPlace(char* szDomain, unsigned long long iSize)
+{
+    if (iSize <= 1)
+        return EXIT_FAILURE;
+
+
+    for(int i = 0; i < iSize; i++)
+    {
+        char c = szDomain[i];
+
+        if (c == '\0')
+            break;
+
+        int bUpperCase = c >= 'A' && c <= 'Z';
+        int bLowerCase = c >= 'a' && c <= 'z';
+        int bNum       = c >= '0' && c <= '9';
+        int bMinusSign = c == '-';
+
+        if (bUpperCase == 0 && bLowerCase == 0 && bNum == 0 && bMinusSign == 0)
+            szDomain[i] = '.';
+    }
+
+
+    // Shift all chars to left by one.
+    for (int i = 0; i < iSize - 1; i++)
+    {
+        if (szDomain[i] == '\0')
+            break;
+
+        szDomain[i] = szDomain[i + 1];
+    }
+
+    return EXIT_SUCCESS;
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+int StrLen(const char* szInput)
+{
+    int iSize = 0;
+    while (*szInput != '\0')
+        ++iSize;
+
+    return iSize;
+}
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -78,23 +133,31 @@ static unsigned int NfHook(void *pPriv, struct sk_buff *pSkb, const struct nf_ho
     g_szLabelBuffer[sizeof(g_szLabelBuffer) - 1] = '\0';           // Make sure raw-label is null-terminated.
 
 
-    unsigned int i = 0;
-    while (i < sizeof(g_szLabelBuffer))
-    {
-        if (g_szLabelBuffer[i] == '\0')
-            break;
+    if (FixDomainInPlace(g_szLabelBuffer, sizeof(g_szLabelBuffer)) != EXIT_SUCCESS)
+        return NF_ACCEPT;
 
+    BF_FormatStrInPlace(g_szLabelBuffer);
+    printk(KERN_INFO "%s [ bloom-filter : %d ]\n", g_szLabelBuffer, BF_CheckString(&g_filter, g_szLabelBuffer, StrLen(g_szLabelBuffer)));
 
-        unsigned long long iLabelSize  = (unsigned long long)g_szLabelBuffer[i];
-        int                iMatchFound = 0; // BF_CheckString(&g_szLabelBuffer[i + 1], iLabelSize);
-        if (iMatchFound == true)
-        {
-            schedule_work(&NoxKernelRebootWork); // kaboom!
-            break;
-        }
-
-        i += iLabelSize + 1; // +1 so i moves past the label onto the next label size character.
-    }
+    // unsigned int i = 0;
+    // while (i < sizeof(g_szLabelBuffer))
+    // {
+    //     if (g_szLabelBuffer[i] == '\0')
+    //         break;
+    //
+    //
+    //     unsigned long long iLabelSize = (unsigned long long)g_szLabelBuffer[i];
+    //     FixDomainInPlace(g_szLabelBuffer); BF_FormatStrInPlace(g_szLabelBuffer);
+    //     int iMatchFound = BF_CheckString(&g_szLabelBuffer[i + 1], iLabelSize);
+    //     if (iMatchFound == true)
+    //     {
+    //         printk(KERN_INFO "[ NoX ] Foul domain detected : %s\n", g_szLabelBuffer);
+    //         // schedule_work(&NoxKernelRebootWork); // kaboom!
+    //         break;
+    //     }
+    //
+    //     i += iLabelSize + 1; // +1 so i moves past the label onto the next label size character.
+    // }
 
 
     return NF_ACCEPT;

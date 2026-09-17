@@ -127,7 +127,7 @@ int main(int nArgs, char** szArgs)
     while (fgets(szBuffer, sizeof(szBuffer), pInputFile) != NULL)
     {
         BF_FormatStrInPlace(szBuffer);
-        BF_AddString(filterDesc.m_pBloomFilter, &filterDesc, szBuffer, strlen(szBuffer));
+        BF_AddString(&filterDesc, szBuffer, strlen(szBuffer));
     }
 
 
@@ -247,7 +247,7 @@ static void WriteFilterToFile(FILE* pOutputFile, struct FilterDesc_t* pFilterDes
 
 
     size_t iFilterSizeBytes = pFilterDesc->m_iFilterSize / 8; // Size is in bits right here.
-    fprintf(pOutputFile, "static unsigned char g_pBloomFilterRaw[%zu] = {", iFilterSizeBytes);
+    fprintf(pOutputFile, "__attribute__((aligned(64))) static unsigned char g_pBloomFilterRaw[%zu] = {", iFilterSizeBytes);
     for (size_t iByteIndex = 0; iByteIndex < iFilterSizeBytes; iByteIndex++)
     {
         if (iByteIndex % 16 == 0)
@@ -258,7 +258,7 @@ static void WriteFilterToFile(FILE* pOutputFile, struct FilterDesc_t* pFilterDes
     fprintf(pOutputFile, "\n};\n\n\n");
 
 
-    fprintf(pOutputFile, "struct FilterDesc_t g_filter = {\n");
+    fprintf(pOutputFile, "__attribute__((aligned(64))) struct FilterDesc_t g_filter = {\n");
     fprintf(pOutputFile, "    .m_iFilterSize     = %llu,\n", pFilterDesc->m_iFilterSize);
     fprintf(pOutputFile, "    .m_iK              = %llu,\n", pFilterDesc->m_iK);
     fprintf(pOutputFile, "    .m_iDataSize       = %llu,\n", pFilterDesc->m_iDataSize);

@@ -60,7 +60,7 @@ int main(int argc, char** argv)
     while(fgets(szBuffer, sizeof(szBuffer), h_datafile) != NULL) {
         BF_FormatStrInPlace(szBuffer);
 
-        int bFound = BF_CheckString(g_filter.m_pBloomFilter, &g_filter, szBuffer, strlen(szBuffer));
+        int bFound = BF_CheckString(&g_filter, szBuffer, strlen(szBuffer));
         if (bFound == false) {
             printf("Failed to find : %s\n", szBuffer);
             ++fails;

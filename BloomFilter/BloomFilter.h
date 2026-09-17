@@ -16,7 +16,7 @@ struct FilterDesc_t;
 
 void         BF_AddString   (struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen);
 
-// 0 -> String doesn't exist in teh bloom filter. 1 -> String might exist in the bloom filter.
+// 0 -> String doesn't exist in the Bloom-Filter. 1 -> String might exist in the Bloom-Filter.
 int          BF_CheckString (struct FilterDesc_t* pFilterDesc, const char* szInput, unsigned long iLen);
 unsigned int BF_GetSeed     (int iK);
 unsigned int BF_GetBlockSeed(void);
@@ -29,4 +29,4 @@ void         BF_FormatStrInPlace(char* szInput);
 
 
 
-#endif
+#endif /* BLOOM_FILTER_H */
