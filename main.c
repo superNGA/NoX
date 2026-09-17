@@ -39,12 +39,9 @@ MODULE_AUTHOR     ("insane");
 static struct kprobe      g_kprobe;
 static struct nf_hook_ops g_nfHookOps;
 
-
-__attribute__((aligned(CLS))) unsigned char g_szLabelBuffer[256] = {0};
-
-
 extern struct FilterDesc_t g_filter; // Bloom Filter.
 
+static int g_iFilterHits = 0;
 
 
 
@@ -97,13 +94,14 @@ static int FixDomainInPlace(char* szDomain, unsigned long long iSize)
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
-int StrLen(const char* szInput)
+static int StrLen(const char* szInput, int iMaxLen)
 {
-    int iSize = 0;
-    while (*szInput != '\0')
-        ++iSize;
+    int i = 0;
 
-    return iSize;
+    while ( i <= iMaxLen && szInput[i] != '\0')
+        ++i;
+
+    return i;
 }
 
 
@@ -127,37 +125,31 @@ static unsigned int NfHook(void *pPriv, struct sk_buff *pSkb, const struct nf_ho
         return NF_ACCEPT;
 
 
+    int required_len = skb_transport_offset(pSkb) + sizeof(struct udphdr) + 12 + 1;
+    if (skb_is_nonlinear(pSkb) || skb_headlen(pSkb) < required_len) {
+        return NF_ACCEPT; 
+    }
+
+
     // Skip 8-byte UDP header + 12-byte DNS header directly to the QNAME field
-    unsigned char *szRawQname = (unsigned char *)pUdph + sizeof(struct udphdr) + 12;
-    strncpy(g_szLabelBuffer, szRawQname, sizeof(g_szLabelBuffer)); // Copy raw label into the buffer.
-    g_szLabelBuffer[sizeof(g_szLabelBuffer) - 1] = '\0';           // Make sure raw-label is null-terminated.
+    __attribute__((aligned(CLS))) unsigned char szLabelBuffer[256] = {0};
+    unsigned char *szRawQname = (unsigned char*)pUdph + sizeof(struct udphdr) + 12;
+    strncpy(szLabelBuffer, szRawQname, sizeof(szLabelBuffer)); // Copy raw label into the buffer.
+    szLabelBuffer[sizeof(szLabelBuffer) - 1] = '\0';           // Make sure raw-label is null-terminated.
 
 
-    if (FixDomainInPlace(g_szLabelBuffer, sizeof(g_szLabelBuffer)) != EXIT_SUCCESS)
+    if (FixDomainInPlace(szLabelBuffer, sizeof(szLabelBuffer)) != EXIT_SUCCESS)
         return NF_ACCEPT;
 
-    BF_FormatStrInPlace(g_szLabelBuffer);
-    printk(KERN_INFO "%s [ bloom-filter : %d ]\n", g_szLabelBuffer, BF_CheckString(&g_filter, g_szLabelBuffer, StrLen(g_szLabelBuffer)));
 
-    // unsigned int i = 0;
-    // while (i < sizeof(g_szLabelBuffer))
-    // {
-    //     if (g_szLabelBuffer[i] == '\0')
-    //         break;
-    //
-    //
-    //     unsigned long long iLabelSize = (unsigned long long)g_szLabelBuffer[i];
-    //     FixDomainInPlace(g_szLabelBuffer); BF_FormatStrInPlace(g_szLabelBuffer);
-    //     int iMatchFound = BF_CheckString(&g_szLabelBuffer[i + 1], iLabelSize);
-    //     if (iMatchFound == true)
-    //     {
-    //         printk(KERN_INFO "[ NoX ] Foul domain detected : %s\n", g_szLabelBuffer);
-    //         // schedule_work(&NoxKernelRebootWork); // kaboom!
-    //         break;
-    //     }
-    //
-    //     i += iLabelSize + 1; // +1 so i moves past the label onto the next label size character.
-    // }
+    BF_FormatStrInPlace(szLabelBuffer); szLabelBuffer[sizeof(szLabelBuffer) - 1] = '\0';
+    int iDomainLen = StrLen(szLabelBuffer, sizeof(szLabelBuffer));
+    int iFilterHit = BF_CheckString(&g_filter, szLabelBuffer, iDomainLen);
+    if (iFilterHit != 0)
+    {
+        ++g_iFilterHits;
+        printk(KERN_INFO "Filter hit on : %s. Total hits : %d\n", szLabelBuffer, g_iFilterHits);
+    }
 
 
     return NF_ACCEPT;
@@ -181,12 +173,13 @@ static int DeleteMod_PreHandler(struct kprobe *pKp, struct pt_regs *pReg)
     }
     szModuleName[sizeof(szModuleName) - 1] = 0; // Assert null terminated string here.
     
+    printk(KERN_INFO "Trying to close : %s", szUserModuleName);
 
     // No close NoX.
     if (strncmp(szModuleName, KBUILD_MODNAME, sizeof(szModuleName)) == 0)
     {
         printk(KERN_INFO "[ NoX ] No closing NoX");
-        return 0; // Tell kernel this call has been handled.
+        return 0; // return 1; // Tell kernel this call has been handled.
     }
 
     return 0;
@@ -204,32 +197,75 @@ static void DeleteMod_PostHandler(struct kprobe *pKp, struct pt_regs *pReg, unsi
 
 ///////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////
+static int RegisterKProbe(struct kprobe* pKprobe) 
+{
+    int iRet = register_kprobe(pKprobe);
+    if (iRet < 0)
+        printk(KERN_INFO "[ NoX ] Failed to register kprobe for symbol %s", pKprobe->symbol_name);
+    else
+        printk(KERN_INFO "[ NoX ] Registered kprobe for symbol %s", pKprobe->symbol_name);
+
+    return iRet;
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+static void UnregisterKProbe(struct kprobe* pKprobe)
+{
+    unregister_kprobe(pKprobe);
+    printk(KERN_INFO "[ NoX ] Unregistered kprobe for symbol %s", pKprobe->symbol_name);
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+static int RegisterNFHook(struct nf_hook_ops* pNfHook)
+{
+    int iRet = nf_register_net_hook(&init_net, &g_nfHookOps);
+    if (iRet < 0)
+        printk(KERN_INFO "[ NoX ] Failed to register Net-Filter hook");
+    else
+        printk(KERN_INFO "[ NoX ] Registered Net-Filter hook");
+
+    return iRet;
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
+static void UnregisterNFHook(struct nf_hook_ops* pNfHook)
+{
+    nf_unregister_net_hook(&init_net, pNfHook);
+    printk(KERN_INFO "[ NoX ] Unregistered Net-Filter Hook");
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////
 static int InitModule(void)
 {
     // Register the kprobe.
     g_kprobe.symbol_name  = "__x64_sys_delete_module";
     g_kprobe.pre_handler  = DeleteMod_PreHandler;
     g_kprobe.post_handler = DeleteMod_PostHandler;
-    int iRet              = register_kprobe(&g_kprobe);
-    if (iRet < 0)
-    {
-        printk(KERN_INFO "Failed to register kprobe for : %s\n", g_kprobe.symbol_name);
-        return iRet;
-    }
+    int iKprobeRet        = RegisterKProbe(&g_kprobe);
+    if (iKprobeRet < 0)
+        return iKprobeRet;
 
 
     // Register net-filter hook.
     g_nfHookOps.hook     = NfHook;
-    g_nfHookOps.hooknum  = NF_INET_LOCAL_OUT; // Intercept outbound host traffic
-    g_nfHookOps.pf       = PF_INET;           // IPv4
+    g_nfHookOps.hooknum  = NF_INET_LOCAL_OUT;
+    g_nfHookOps.pf       = PF_INET;
     g_nfHookOps.priority = NF_IP_PRI_FIRST;
-    nf_register_net_hook(&init_net, &g_nfHookOps);
+    int iNfHookRet       = RegisterNFHook(&g_nfHookOps);
+    if (iNfHookRet < 0)
+    {
+        UnregisterKProbe(&g_kprobe);
+        return iNfHookRet;
+    }
 
-
-    printk(KERN_INFO "Bloom Filter Initialized.\n");
-
-
-    printk(KERN_INFO "Registered the kprobe for : %s\n", g_kprobe.symbol_name);
     return 0;
 }
 
@@ -238,12 +274,8 @@ static int InitModule(void)
 ///////////////////////////////////////////////////////////////////////////
 static void CleanupModule(void)
 {
-    unregister_kprobe(&g_kprobe);
-    printk(KERN_INFO "Unregistered the kprobe : %s\n", g_kprobe.symbol_name);
-
-    nf_unregister_net_hook(&init_net, &g_nfHookOps);
-    printk(KERN_INFO "Unregistered Net-Filter hook.\n");
-    return;
+    UnregisterKProbe(&g_kprobe);
+    UnregisterNFHook(&g_nfHookOps);
 }
 
 

@@ -80,7 +80,7 @@ int main(int nArgs, char** szArgs)
     struct FilterDesc_t filterDesc;
     filterDesc.m_iBlockSizeBytes  = BLOCK_SIZE;
     filterDesc.m_iDataSize        = CountLinesInFile(pInputFile);
-    filterDesc.m_iFilterSize      = CalcFilterSize  (filterDesc.m_iDataSize, 0.01, BLOCK_SIZE * 8);
+    filterDesc.m_iFilterSize      = CalcFilterSize  (filterDesc.m_iDataSize, 0.001, BLOCK_SIZE * 8);
     if (filterDesc.m_iFilterSize == 0 || filterDesc.m_iDataSize == 0 || filterDesc.m_iFilterSize % filterDesc.m_iBlockSizeBytes != 0)
     {
         printf("Invalid filter size or data size\n.");
