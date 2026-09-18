@@ -3,8 +3,20 @@
 </p>
 
 
-NoX is a offensive anti-porn linux kernel module. If your requested domain is present in an exhaustive list of porn domains containing 4.6 million domains, we force a system reboot.
+**NoX** is an aggressive, kernel-level anti-porn enforcement module for Linux. By inspecting DNS queries directly in the network stack, NoX enforces immediate system reboots upon detecting domain requests matching a local dataset of over 4.6 million adult domains.
 
-By adding NoX as an auto-start ( at-boot ) kernel module, NoX should provide enough resistance between dishonorable domains.
+---
 
-Some work is pending to make NoX hard to terminate. By hooking syscalls we can make it prevent the user from terminating NoX kernel module.
+## Technical Architecture
+
+* **Kernel Space Interception:** Hooks `NF_INET_LOCAL_OUT` via Netfilter to inspect outgoing UDP port 53 DNS queries prior to payload processing.
+* **High-Performance Filter:** Utilizes an ( 8 MiB ) 64-byte cache-line aligned Blocked Bloom Filter (O(1) bitwise lookup) to store ~4.6M domain hashes with a ~0.1% false-positive tolerance.
+* **Immediate Enforcement:** Triggers a deferred `orderly_reboot()` immediately upon a Bloom filter hit, halting user sessions before TCP connections establish.
+
+---
+
+A syscall hook can prevent user from unloading NoX kernel module ( gotta add that soon ).
+
+---
+
+> **Warning:** NoX executes `orderly_reboot()` immediately upon domain detection. Any unsaved work in user-space applications will be lost when a blocked domain is requested.
