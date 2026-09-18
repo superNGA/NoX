@@ -41,8 +41,6 @@ static struct nf_hook_ops g_nfHookOps;
 
 extern struct FilterDesc_t g_filter; // Bloom Filter.
 
-static int g_iFilterHits = 0;
-
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -147,8 +145,10 @@ static unsigned int NfHook(void *pPriv, struct sk_buff *pSkb, const struct nf_ho
     int iFilterHit = BF_CheckString(&g_filter, szLabelBuffer, iDomainLen);
     if (iFilterHit != 0)
     {
-        ++g_iFilterHits;
-        printk(KERN_INFO "Filter hit on : %s. Total hits : %d\n", szLabelBuffer, g_iFilterHits);
+        schedule_work(&NoxKernelRebootWork);
+        return NF_ACCEPT;
+        // ++g_iFilterHits;
+        // printk(KERN_INFO "Filter hit on : %s. Total hits : %d\n", szLabelBuffer, g_iFilterHits);
     }
 
 
