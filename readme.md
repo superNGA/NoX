@@ -33,7 +33,7 @@
 ---
 
 ## Data
-* Data present in the BlackList/ folder is from `The University Toulouse Capitole` and contains over 4.6 million domains. However, I've noticed that does not contain some common local domains. One may want to adjust the domain list according to personal needs and rebuild the filter.
+* Data present in the BlackList/ folder is from `The University Toulouse Capitole` and contains over 4.6 million domains. However, I've noticed that it does not contain some common local domains. One may want to adjust the domain list according to personal needs and rebuild the filter.
 
 ---
 
