@@ -18,15 +18,22 @@
 
 ## Bloom-Filter
 * Filter is generated as a .c file, and needs to build into the NoX Kernel-Module binary. ( not optimal? send PR. )
-* To generate a filter, use the BloomFilteGen. ( build : `gcc BloomFilterGen/BloomFilterGen.c BloomFilter/BloomFilter.c Hash/murmur3.c -lm -o BloomFilterGen/BloomFilterGen.out` )
+* To generate a filter, use the BloomFilterGen. ( build gen : `gcc BloomFilterGen/BloomFilterGen.c BloomFilter/BloomFilter.c Hash/murmur3.c -lm -o BloomFilterGen/BloomFilterGen.out` )
+* Bloom Filter Gen usage : `./BloomFilterGen -i relative_path_to_data_file -o output_c_file`
 * Data feed into the BloomFilterGen is expected to be in `domain + \n` format.
 * Once BloomFilter is generated it can be tested using the BloomFilter-Test-Tools ( BloomFilterGen/GenTestTools ). 
-* Build the test tools using `gcc BloomFilterGen/GenTestTools/BloomFilterTest.c BloomFilter/BloomFilter.c Hash/murmur3.c Filter.c -o BloomFilterGen/GenTestTools/BloomFilterTest.out` and `gcc BloomFilterGen/GenTestTools/BloomFilterTestCli.c BloomFilter/BloomFilter.c Hash/murmur3.c Filter.c -o BloomFilterGen/GenTestTools/BloomFilterTestCli.out`
+* Build test tools : `gcc BloomFilterGen/GenTestTools/BloomFilterTest.c BloomFilter/BloomFilter.c Hash/murmur3.c Filter.c -o BloomFilterGen/GenTestTools/BloomFilterTest.out`
+* Build test tool cli : `gcc BloomFilterGen/GenTestTools/BloomFilterTestCli.c BloomFilter/BloomFilter.c Hash/murmur3.c Filter.c -o BloomFilterGen/GenTestTools/BloomFilterTestCli.out`
 
 ---
 
 ## How To Build
 * Make sure `Filter.c` file contains our filter and run `./build.sh`
+
+---
+
+## Data
+* Data present in the BlackList/ folder is from `The University Toulouse Capitole` and contains over 4.6 million domains. However, I've noticed that does not contain some common local domains. One may want to adjust the domain list according to personal needs and rebuild the filter.
 
 ---
 
